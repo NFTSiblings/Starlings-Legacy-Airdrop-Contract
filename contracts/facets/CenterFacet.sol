@@ -1,172 +1,135 @@
-// // SPDX-License-Identifier: MIT
-// pragma solidity ^0.8.4;
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.4;
 
-// /**************************************************************\
-//  * CenterFacetLib authored by Sibling Labs
-//  * Version 0.1.0
-//  * 
-//  * This library is designed to work in conjunction with
-//  * CenterFacet - it facilitates diamond storage and shared
-//  * functionality associated with CenterFacet.
-// /**************************************************************/
+/**************************************************************\
+ * CenterFacetLib authored by Sibling Labs
+ * Version 0.1.0
+ * 
+ * This contract has been designed as part of a 
+/**************************************************************/
 
-// import "erc721a-upgradeable/contracts/ERC721AStorage.sol";
+import "../ancillary/ERC721DiamondStorage.sol";
 
-// library CenterFacetLib {
-//     bytes32 constant DIAMOND_STORAGE_POSITION = keccak256("tokenfacet.storage");
+library CenterFacetLib {
+    bytes32 constant DIAMOND_STORAGE_POSITION = keccak256("starlingslegacy.centerfacet.storage");
 
-//     struct state {
-//         uint256 maxSupply;
-//         uint256[] walletCap;
-//         uint256[] price;
-//         string baseURI;
-//         bool burnStatus;
-//     }
+    struct state {
+        address authorisedSigner;
+        string baseURI;
+        bool burnsPermitted;
+        mapping(address => bool) allowedTransferrers;
+        mapping(uint256 => bool) allowedTransferTokens;
+    }
 
-//     /**
-//     * @dev Return stored state struct.
-//     */
-//     function getState() internal pure returns (state storage _state) {
-//         bytes32 position = DIAMOND_STORAGE_POSITION;
-//         assembly {
-//             _state.slot := position
-//         }
-//     }
-// }
+    /**
+    * @dev Return stored state struct.
+    */
+    function getState() internal pure returns (state storage _state) {
+        bytes32 position = DIAMOND_STORAGE_POSITION;
+        assembly {
+            _state.slot := position
+        }
+    }
+}
 
-// /**************************************************************\
-//  * CenterFacet authored by Sibling Labs
-//  * Version 0.1.0
-//  * 
-//  * This facet contract has been written specifically for
-//  * ERC721A-DIAMOND-TEMPLATE by Sibling Labs
-// /**************************************************************/
+/**************************************************************\
+ * CenterFacet authored by Sibling Labs
+ * Version 0.1.0
+ * 
+ * This facet contract has been written specifically for
+ * ERC721A-DIAMOND-TEMPLATE by Sibling Labs
+/**************************************************************/
 
-// import { GlobalState } from "../libraries/GlobalState.sol";
-// import 'erc721a-upgradeable/contracts/ERC721AUpgradeable.sol';
+import { GlobalState } from "../libraries/GlobalState.sol";
+import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 
-// contract CenterFacet is ERC721AUpgradeable {
-//     // VARIABLE GETTERS //
+contract CenterFacet is ERC721 {
+    using ECDSA for bytes32;
+    using ECDSA for bytes;
 
-//     function maxSupply() external view returns (uint256) {
-//         return CenterFacetLib.getState().maxSupply;
-//     }
+    // VARIABLE GETTERS //
 
-//     function walletCapAL() external view returns (uint256) {
-//         return CenterFacetLib.getState().walletCap[0];
-//     }
+    function authorisedSigner() external view returns (address) {
+        return CenterFacetLib.getState().authorisedSigner;
+    }
 
-//     function walletCap() external view returns (uint256) {
-//         return CenterFacetLib.getState().walletCap[1];
-//     }
+    function burnsPermitted() external view returns (bool) {
+        return CenterFacetLib.getState().burnsPermitted;
+    }
 
-//     function priceAL() external view returns (uint256) {
-//         return CenterFacetLib.getState().price[0];
-//     }
+    // SETUP & ADMIN FUNCTIONS //
 
-//     function price() external view returns (uint256) {
-//         return CenterFacetLib.getState().price[1];
-//     }
+    function toggleBurnPermission() external {
+        GlobalState.requireCallerIsAdmin();
+        CenterFacetLib.getState().burnsPermitted = !CenterFacetLib.getState().burnsPermitted;
+    }
 
-//     function burnStatus() external view returns (bool) {
-//         return CenterFacetLib.getState().burnStatus;
-//     }
+    function setBaseURI(string memory uri) external {
+        GlobalState.requireCallerIsAdmin();
+        CenterFacetLib.getState().baseURI = uri;
+    }
 
-//     // SETUP & ADMIN FUNCTIONS //
+    function setAuthorisedSigner(address s) external {
+        GlobalState.requireCallerIsAdmin();
+        CenterFacetLib.getState().authorisedSigner = s;
+    }
 
-//     function setPrices(uint256 _price, uint256 _priceAL) external {
-//         GlobalState.requireCallerIsAdmin();
-//         CenterFacetLib.getState().price[0] = _priceAL;
-//         CenterFacetLib.getState().price[1] = _price;
-//     }
+    function reserve(uint256 amount) external {
+        GlobalState.requireCallerIsAdmin();
+        _safeMint(msg.sender, amount);
+    }
 
-//     function setWalletCaps(uint256 _walletCap, uint256 _walletCapAL) external {
-//         GlobalState.requireCallerIsAdmin();
-//         CenterFacetLib.getState().walletCap[0] = _walletCapAL;
-//         CenterFacetLib.getState().walletCap[1] = _walletCap;
-//     }
+    // PUBLIC FUNCTIONS //
 
-//     function toggleBurnStatus() external {
-//         GlobalState.requireCallerIsAdmin();
-//         CenterFacetLib.getState().burnStatus = !CenterFacetLib.getState().burnStatus;
-//     }
+    function returnHash() external view returns (bytes32) {
+        return abi.encodePacked(msg.sender).toEthSignedMessageHash();
+    }
 
-//     function setBaseURI(string memory URI) external {
-//         GlobalState.requireCallerIsAdmin();
-//         CenterFacetLib.getState().baseURI = URI;
-//     }
+    /// @param signature a bytes signature generated by the authorised signer
+    ///                  containing the address of the minter, who calls this
+    ///                  function
+    function mint(uint256 tokenId, bytes memory signature) external payable {
+        GlobalState.requireContractIsNotPaused();
+        require(
+            abi.encodePacked(msg.sender)
+            .toEthSignedMessageHash()
+            .recover(signature) == CenterFacetLib.getState().authorisedSigner,
+            "CenterFacet: invalid signature"
+        );
 
-//     function reserve(uint256 amount) external {
-//         GlobalState.requireCallerIsAdmin();
-//         _safeMint(msg.sender, amount);
-//     }
+        _safeMint(msg.sender, tokenId);
+    }
 
-//     // PUBLIC FUNCTIONS //
+    function burn(uint256 tokenId) external {
+        GlobalState.requireContractIsNotPaused();
+        require(CenterFacetLib.getState().burnsPermitted, "CenterFacet: token burning is not permitted now");
 
-//     function mint(uint256 amount, bytes32[] calldata _merkleProof) external payable {
-//         GlobalState.requireContractIsNotPaused();
+        _burn(tokenId);
+    }
 
-//         bool al = SaleHandlerLib.isPrivSaleActive();
-//         if (al)  {
-//             AllowlistLib.requireValidProof(_merkleProof);
-//         } else {
-//             require(SaleHandlerLib.isPublicSaleActive(), "CenterFacet: token sale is not available now");
-//         }
+    // METADATA & MISC FUNCTIONS //
 
-//         CenterFacetLib.state storage s = CenterFacetLib.getState();
+    function exists(uint256 tokenId) external view returns (bool) {
+        return _exists(tokenId);
+    }
 
-//         uint256 _price = al ? s.price[0] : s.price[1];
-//         require(msg.value == _price * amount, "CenterFacet: incorrect amount of ether sent");
+    function _baseURI() internal view override returns (string memory) {
+        return CenterFacetLib.getState().baseURI;
+    }
 
-//         uint256 _walletCap = al ? s.walletCap[0] : s.walletCap[1];
-//         require(
-//             amount + _numberMinted(msg.sender) <= _walletCap,
-//             string(
-//                 abi.encodePacked(
-//                     "CenterFacet: maximum tokens per wallet during ",
-//                     al ? "private" : "public",
-//                     " sale is ",
-//                     _toString(_walletCap)
-//                 )
-//             )
-//         );
+    function _beforeTokenTransfer(
+        address from,
+        address to,
+        uint256 tokenId
+    ) internal override {
+        super._beforeTokenTransfer(from, to, tokenId);
 
-//         _safeMint(msg.sender, amount);
-//     }
-
-//     function burn(uint256 tokenId) external {
-//         GlobalState.requireContractIsNotPaused();
-//         require(CenterFacetLib.getState().burnStatus, "CenterFacet: token burning is not available now");
-
-//         _burn(tokenId, true);
-//     }
-
-//     // METADATA & MISC FUNCTIONS //
-
-//     function exists(uint256 tokenId) external view returns (bool) {
-//         return _exists(tokenId);
-//     }
-
-//     function _safeMint(address to, uint256 amount) internal override {
-//         uint256 totalMinted = _totalMinted();
-//         require(
-//             totalMinted + amount <= CenterFacetLib.getState().maxSupply,
-//             "CenterFacet: too few tokens remaining"
-//         );
-
-//         super._safeMint(to, amount);
-//     }
-
-//     function _baseURI() internal view override returns (string memory) {
-//         return CenterFacetLib.getState().baseURI;
-//     }
-
-//     function _beforeTokenTransfers(
-//         address from,
-//         address to,
-//         uint256 startTokenId,
-//         uint256 quantity
-//     ) internal view override {
-//         GlobalState.requireContractIsNotPaused();
-//     }
-// }
+        GlobalState.requireContractIsNotPaused();
+        require(
+            from == address(0) ||
+            CenterFacetLib.getState().allowedTransferrers[from] ||
+            CenterFacetLib.getState().allowedTransferTokens[tokenId],
+            "CenterFacet: token transfers prohibited"
+        );
+    }
+}
