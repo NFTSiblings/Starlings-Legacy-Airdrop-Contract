@@ -67,25 +67,26 @@ contract DiamondInit {
 
     // ERC165Facet //
 
-    bytes4 private constant ID_IERC165 = 0x01ffc9a7;
-    bytes4 private constant ID_IERC173 = 0x7f5828d0;
-    bytes4 private constant ID_IERC2981 = 0x2a55205a;
-    bytes4 private constant ID_IERC721 = 0x80ac58cd;
-    bytes4 private constant ID_IERC721METADATA = 0x5b5e139f;
-    bytes4 private constant ID_IDIAMONDLOUPE = 0x48e2b093;
-    bytes4 private constant ID_IDIAMONDCUT = 0x1f931c1c;
-
     function initERC165Facet() public {
+        // List of bytes4 selectors must be placed inside this
+        // function, as arrays cannot be constant and
+        // therefore will not be accessible by the
+        // delegatecall from the diamond contract.
+        
+        bytes4[] memory selectors = new bytes4[](7);
+        selectors[0] = 0x01ffc9a7; // IERC165
+        selectors[1] = 0x7f5828d0; // IERC173
+        selectors[2] = 0x2a55205a; // IERC2981
+        selectors[3] = 0x80ac58cd; // IERC721
+        selectors[4] = 0x5b5e139f; // IERC721METADATA
+        selectors[5] = 0x48e2b093; // IDIAMONDLOUPE
+        selectors[6] = 0x1f931c1c; // IDIAMONDCUT
+
         ERC165Lib.state storage s = ERC165Lib.getState();
 
-        s.supportedInterfaces[ID_IERC165] = true;
-        s.supportedInterfaces[ID_IERC173] = true;
-        s.supportedInterfaces[ID_IERC2981] = true;
-        s.supportedInterfaces[ID_IERC721] = true;
-        s.supportedInterfaces[ID_IERC721METADATA] = true;
-
-        s.supportedInterfaces[ID_IDIAMONDLOUPE] = true;
-        s.supportedInterfaces[ID_IDIAMONDCUT] = true;
+        for(uint8 i; i < selectors.length; i++) {
+            s.supportedInterfaces[selectors[i]] = true;
+        }
     }
 
     // PaymentSplitterFacet //
