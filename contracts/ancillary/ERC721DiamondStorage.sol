@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-struct appStorage {
+library ERC721Lib {
+    bytes32 constant DIAMOND_STORAGE_POSITION = keccak256("erc721.storage");
+
+    struct state {
     // Token name
     string  _name;
 
@@ -21,6 +24,17 @@ struct appStorage {
     mapping(address => mapping(address => bool))  _operatorApprovals;
 }
 
+    /**
+    * @dev Return stored state struct.
+    */
+    function getState() internal pure returns (state storage _state) {
+        bytes32 position = DIAMOND_STORAGE_POSITION;
+        assembly {
+            _state.slot := position
+        }
+    }
+}
+
 import "@openzeppelin/contracts/interfaces/IERC721.sol";
 import "@openzeppelin/contracts/interfaces/IERC721Receiver.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
@@ -34,8 +48,6 @@ import "@openzeppelin/contracts/utils/Strings.sol";
 contract ERC721 is IERC721 {
     using Address for address;
     using Strings for uint256;
-
-    appStorage internal s;
 
     /**
     //  * @dev See {IERC165-supportsInterface}.
@@ -52,14 +64,14 @@ contract ERC721 is IERC721 {
      */
     function balanceOf(address owner) public view virtual override returns (uint256) {
         require(owner != address(0), "ERC721: address zero is not a valid owner");
-        return s._balances[owner];
+        return ERC721Lib.getState()._balances[owner];
     }
 
     /**
      * @dev See {IERC721-ownerOf}.
      */
     function ownerOf(uint256 tokenId) public view virtual override returns (address) {
-        address owner = s._owners[tokenId];
+        address owner = ERC721Lib.getState()._owners[tokenId];
         require(owner != address(0), "ERC721: invalid token ID");
         return owner;
     }
@@ -68,14 +80,14 @@ contract ERC721 is IERC721 {
      * @dev See {IERC721Metadata-name}.
      */
     function name() public view virtual returns (string memory) {
-        return s._name;
+        return ERC721Lib.getState()._name;
     }
 
     /**
      * @dev See {IERC721Metadata-symbol}.
      */
     function symbol() public view virtual returns (string memory) {
-        return s._symbol;
+        return ERC721Lib.getState()._symbol;
     }
 
     /**
@@ -115,7 +127,7 @@ contract ERC721 is IERC721 {
     function getApproved(uint256 tokenId) public view virtual override returns (address) {
         _requireMinted(tokenId);
 
-        return s._tokenApprovals[tokenId];
+        return ERC721Lib.getState()._tokenApprovals[tokenId];
     }
 
     /**
@@ -129,7 +141,7 @@ contract ERC721 is IERC721 {
      * @dev See {IERC721-isApprovedForAll}.
      */
     function isApprovedForAll(address owner, address operator) public view virtual override returns (bool) {
-        return s._operatorApprovals[owner][operator];
+        return ERC721Lib.getState()._operatorApprovals[owner][operator];
     }
 
     /**
@@ -207,7 +219,7 @@ contract ERC721 is IERC721 {
      * and stop existing when they are burned (`_burn`).
      */
     function _exists(uint256 tokenId) internal view virtual returns (bool) {
-        return s._owners[tokenId] != address(0);
+        return ERC721Lib.getState()._owners[tokenId] != address(0);
     }
 
     /**
@@ -267,8 +279,8 @@ contract ERC721 is IERC721 {
 
         _beforeTokenTransfer(address(0), to, tokenId);
 
-        s._balances[to] += 1;
-        s._owners[tokenId] = to;
+        ERC721Lib.getState()._balances[to] += 1;
+        ERC721Lib.getState()._owners[tokenId] = to;
 
         emit Transfer(address(0), to, tokenId);
 
@@ -293,8 +305,8 @@ contract ERC721 is IERC721 {
         // Clear approvals
         _approve(address(0), tokenId);
 
-        s._balances[owner] -= 1;
-        delete s._owners[tokenId];
+        ERC721Lib.getState()._balances[owner] -= 1;
+        delete ERC721Lib.getState()._owners[tokenId];
 
         emit Transfer(owner, address(0), tokenId);
 
@@ -325,9 +337,9 @@ contract ERC721 is IERC721 {
         // Clear approvals from the previous owner
         _approve(address(0), tokenId);
 
-        s._balances[from] -= 1;
-        s._balances[to] += 1;
-        s._owners[tokenId] = to;
+        ERC721Lib.getState()._balances[from] -= 1;
+        ERC721Lib.getState()._balances[to] += 1;
+        ERC721Lib.getState()._owners[tokenId] = to;
 
         emit Transfer(from, to, tokenId);
 
@@ -340,7 +352,7 @@ contract ERC721 is IERC721 {
      * Emits an {Approval} event.
      */
     function _approve(address to, uint256 tokenId) internal virtual {
-        s._tokenApprovals[tokenId] = to;
+        ERC721Lib.getState()._tokenApprovals[tokenId] = to;
         emit Approval(ERC721.ownerOf(tokenId), to, tokenId);
     }
 
@@ -355,7 +367,7 @@ contract ERC721 is IERC721 {
         bool approved
     ) internal virtual {
         require(owner != operator, "ERC721: approve to caller");
-        s._operatorApprovals[owner][operator] = approved;
+        ERC721Lib.getState()._operatorApprovals[owner][operator] = approved;
         emit ApprovalForAll(owner, operator, approved);
     }
 
