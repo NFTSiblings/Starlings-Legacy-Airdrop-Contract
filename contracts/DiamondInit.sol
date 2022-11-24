@@ -3,10 +3,10 @@ pragma solidity ^0.8.0;
 
 /**************************************************************\
  * Initialiser contract authored by Sibling Labs
- * Version 0.4.0
+ * Version 0.1.0
  * 
  * This initialiser contract has been written specifically for
- * ERC721A-DIAMOND-TEMPLATE by Sibling Labs
+ * STARLINGS-LEGACY-AIRDROP-CONTRACT by Sibling Labs
 /**************************************************************/
 
 import { GlobalState } from "./libraries/GlobalState.sol";
@@ -18,7 +18,7 @@ import { RoyaltiesConfigLib } from "./facets/RoyaltiesConfigFacet.sol";
 
 contract DiamondInit {
 
-    function initAll() public {
+    function initAll() external {
         initAdminPrivilegesFacet();
         initCenterFacet();
         initERC165Facet();
@@ -33,8 +33,9 @@ contract DiamondInit {
         // as arrays cannot be constant and
         // therefore will not be accessible by the
         // delegatecall from the diamond contract.
-        address[] memory admins = new address[](1);
+        address[] memory admins = new address[](2);
         admins[0] = 0x885Af893004B4405Dc18af1A4147DCDCBdA62b50;
+        admins[1] = 0x699a1928EA12D21dd2138F36A3690059bf1253A0;
 
         for (uint256 i; i < admins.length; i++) {
             GlobalState.getState().admins[admins[i]] = true;
@@ -52,7 +53,6 @@ contract DiamondInit {
 
     function initCenterFacet() public {
         
-
         CenterFacetLib.state storage s1 = CenterFacetLib.getState();
 
         s1.authorisedSigner = authorisedSigner;
@@ -112,7 +112,7 @@ contract DiamondInit {
     // RoyaltiesConfigFacet //
 
     address payable private constant royaltyRecipient = payable(0x699a1928EA12D21dd2138F36A3690059bf1253A0);
-    uint256 private constant royaltyBps = 1000;
+    uint256 private constant royaltyBps = 500;
 
     function initRoyaltiesConfigFacet() public {
         RoyaltiesConfigLib.state storage s = RoyaltiesConfigLib.getState();
