@@ -22,6 +22,18 @@ library ERC721Lib {
 
     // Mapping from owner to operator approvals
     mapping(address => mapping(address => bool))  _operatorApprovals;
+
+    // Mapping from owner to list of owned token IDs
+    mapping(address => mapping(uint256 => uint256)) _ownedTokens;
+
+    // Mapping from token ID to index of the owner tokens list
+    mapping(uint256 => uint256) _ownedTokensIndex;
+
+    // Array with all token ids, used for enumeration
+    uint256[] _allTokens;
+
+    // Mapping from token id to position in the allTokens array
+    mapping(uint256 => uint256) _allTokensIndex;
 }
 
     /**
@@ -36,28 +48,14 @@ library ERC721Lib {
 }
 
 import "@openzeppelin/contracts/interfaces/IERC721.sol";
+import "@openzeppelin/contracts/token/ERC721/extensions/IERC721Enumerable.sol";
 import "@openzeppelin/contracts/interfaces/IERC721Receiver.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
 
-/**
- * @dev Implementation of https://eips.ethereum.org/EIPS/eip-721[ERC721] Non-Fungible Token Standard, including
- * the Metadata extension, but not including the Enumerable extension, which is available separately as
- * {ERC721Enumerable}.
- */
-contract ERC721 is IERC721 {
+contract ERC721 is IERC721, IERC721Enumerable {
     using Address for address;
     using Strings for uint256;
-
-    /**
-    //  * @dev See {IERC165-supportsInterface}.
-    //  */
-    // function supportsInterface(bytes4 interfaceId) public view  returns (bool) {
-    //     return
-    //         interfaceId == type(IERC721).interfaceId ||
-    //         interfaceId == type(IERC721Metadata).interfaceId ||
-    //         super.supportsInterface(interfaceId);
-    // }
 
     /**
      * @dev See {IERC721-balanceOf}.
@@ -430,7 +428,18 @@ contract ERC721 is IERC721 {
         address from,
         address to,
         uint256 tokenId
-    ) internal virtual {}
+    ) internal virtual {
+        if (from == address(0)) {
+            _addTokenToAllTokensEnumeration(tokenId);
+        } else if (from != to) {
+            _removeTokenFromOwnerEnumeration(from, tokenId);
+        }
+        if (to == address(0)) {
+            _removeTokenFromAllTokensEnumeration(tokenId);
+        } else if (to != from) {
+            _addTokenToOwnerEnumeration(to, tokenId);
+        }
+    }
 
     /**
      * @dev Hook that is called after any transfer of tokens. This includes
@@ -449,7 +458,116 @@ contract ERC721 is IERC721 {
         uint256 tokenId
     ) internal virtual {}
 
-    function supportsInterface(bytes4 interfaceId) external view override returns (bool) {
-        //     return type(IERC721).interfaceId;
+    /**
+     * @dev See {IERC165-supportsInterface}.
+     */
+    function supportsInterface(bytes4 interfaceId) public view virtual returns (bool) {
+        return interfaceId == type(IERC721Enumerable).interfaceId || interfaceId == type(IERC721).interfaceId;
+    }
+
+    // ENUMERABLE //
+
+    /**
+     * @dev See {IERC721Enumerable-tokenOfOwnerByIndex}.
+     */
+    function tokenOfOwnerByIndex(address owner, uint256 index) public view virtual returns (uint256) {
+        require(index < ERC721.balanceOf(owner), "ERC721Enumerable: owner index out of bounds");
+        return ERC721Lib.getState()._ownedTokens[owner][index];
+    }
+
+    /**
+     * @dev See {IERC721Enumerable-totalSupply}.
+     */
+    function totalSupply() public view virtual returns (uint256) {
+        return ERC721Lib.getState()._allTokens.length;
+    }
+
+    /**
+     * @dev See {IERC721Enumerable-tokenByIndex}.
+     */
+    function tokenByIndex(uint256 index) public view virtual returns (uint256) {
+        require(index < totalSupply(), "ERC721Enumerable: global index out of bounds");
+        return ERC721Lib.getState()._allTokens[index];
+    }
+
+    /**
+     * @dev Private function to add a token to this extension's ownership-tracking data structures.
+     * @param to address representing the new owner of the given token ID
+     * @param tokenId uint256 ID of the token to be added to the tokens list of the given address
+     */
+    function _addTokenToOwnerEnumeration(address to, uint256 tokenId) private {
+        ERC721Lib.state storage s = ERC721Lib.getState();
+
+        uint256 length = ERC721.balanceOf(to);
+        s._ownedTokens[to][length] = tokenId;
+        s._ownedTokensIndex[tokenId] = length;
+    }
+
+    /**
+     * @dev Private function to add a token to this extension's token tracking data structures.
+     * @param tokenId uint256 ID of the token to be added to the tokens list
+     */
+    function _addTokenToAllTokensEnumeration(uint256 tokenId) private {
+        ERC721Lib.state storage s = ERC721Lib.getState();
+
+        s._allTokensIndex[tokenId] = s._allTokens.length;
+        s._allTokens.push(tokenId);
+    }
+
+    /**
+     * @dev Private function to remove a token from this extension's ownership-tracking data structures. Note that
+     * while the token is not assigned a new owner, the `_ownedTokensIndex` mapping is _not_ updated: this allows for
+     * gas optimizations e.g. when performing a transfer operation (avoiding double writes).
+     * This has O(1) time complexity, but alters the order of the _ownedTokens array.
+     * @param from address representing the previous owner of the given token ID
+     * @param tokenId uint256 ID of the token to be removed from the tokens list of the given address
+     */
+    function _removeTokenFromOwnerEnumeration(address from, uint256 tokenId) private {
+        ERC721Lib.state storage s = ERC721Lib.getState();
+
+        // To prevent a gap in from's tokens array, we store the last token in the index of the token to delete, and
+        // then delete the last slot (swap and pop).
+
+        uint256 lastTokenIndex = ERC721.balanceOf(from) - 1;
+        uint256 tokenIndex = s._ownedTokensIndex[tokenId];
+
+        // When the token to delete is the last token, the swap operation is unnecessary
+        if (tokenIndex != lastTokenIndex) {
+            uint256 lastTokenId = s._ownedTokens[from][lastTokenIndex];
+
+            s._ownedTokens[from][tokenIndex] = lastTokenId; // Move the last token to the slot of the to-delete token
+            s._ownedTokensIndex[lastTokenId] = tokenIndex; // Update the moved token's index
+        }
+
+        // This also deletes the contents at the last position of the array
+        delete s._ownedTokensIndex[tokenId];
+        delete s._ownedTokens[from][lastTokenIndex];
+    }
+
+    /**
+     * @dev Private function to remove a token from this extension's token tracking data structures.
+     * This has O(1) time complexity, but alters the order of the _allTokens array.
+     * @param tokenId uint256 ID of the token to be removed from the tokens list
+     */
+    function _removeTokenFromAllTokensEnumeration(uint256 tokenId) private {
+        ERC721Lib.state storage s = ERC721Lib.getState();
+
+        // To prevent a gap in the tokens array, we store the last token in the index of the token to delete, and
+        // then delete the last slot (swap and pop).
+
+        uint256 lastTokenIndex = s._allTokens.length - 1;
+        uint256 tokenIndex = s._allTokensIndex[tokenId];
+
+        // When the token to delete is the last token, the swap operation is unnecessary. However, since this occurs so
+        // rarely (when the last minted token is burnt) that we still do the swap here to avoid the gas cost of adding
+        // an 'if' statement (like in _removeTokenFromOwnerEnumeration)
+        uint256 lastTokenId = s._allTokens[lastTokenIndex];
+
+        s._allTokens[tokenIndex] = lastTokenId; // Move the last token to the slot of the to-delete token
+        s._allTokensIndex[lastTokenId] = tokenIndex; // Update the moved token's index
+
+        // This also deletes the contents at the last position of the array
+        delete s._allTokensIndex[tokenId];
+        s._allTokens.pop();
     }
 }
