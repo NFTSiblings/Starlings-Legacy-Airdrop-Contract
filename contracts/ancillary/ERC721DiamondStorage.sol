@@ -1,6 +1,18 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
+/**************************************************************\
+ * ERC721DiamondStorage authored by Sibling Labs
+ * Version 0.1.0
+ * 
+ * Adapted from work by Nick Mudge
+ * <nick@perfectabstractions.com> (https://twitter.com/mudgen)
+ * 
+ * This implementation of ERC721 is based on OpenZeppelin's
+ * classic implentation, including the ERC721Enumerable
+ * extension, but is fully compatible with diamond storage.
+/**************************************************************/
+
 library ERC721Lib {
     bytes32 constant DIAMOND_STORAGE_POSITION = keccak256("erc721.storage");
 
